@@ -1121,19 +1121,26 @@ void renameGenericCommand(client *c, int nx) {
     int samekey = 0;
 
     /* When source and dest key is the same, no operation is performed,
-     * if the key exists, however we still return an error on unexisting key. */
+     * if the key exists, however we still return an error on unexisting key. 如果oldKey 不存在 报错*/
+    // 判断两个字符串是否相同
     if (sdscmp(c->argv[1]->ptr,c->argv[2]->ptr) == 0) samekey = 1;
 
+    // 如果oldKey对于的value不存在，直接返回
     if ((o = lookupKeyWriteOrReply(c,c->argv[1],shared.nokeyerr)) == NULL)
         return;
 
+    // 如果oldKey = newKey 返回
     if (samekey) {
+        // 将对象“obj”字符串表示添加到客户端输出缓冲区
         addReply(c,nx ? shared.czero : shared.ok);
         return;
     }
 
+    // 将oldKey指向的引用+1
     incrRefCount(o);
+    // oldKey是否是定时过期key 返回过期时间
     expire = getExpire(c->db,c->argv[1]);
+    // 其中lookupKeyWrite 函数会返回Key所指向的内存指针，如果不为空，则说明已经有数据存储，所以紧接着就会执行删除newKey的逻辑
     if (lookupKeyWrite(c->db,c->argv[2]) != NULL) {
         if (nx) {
             decrRefCount(o);
@@ -1144,8 +1151,10 @@ void renameGenericCommand(client *c, int nx) {
          * with the same name. */
         dbDelete(c->db,c->argv[2]);
     }
+    // 将oldKey 的V 指向 newKey
     dbAdd(c->db,c->argv[2],o);
     if (expire != -1) setExpire(c,c->db,c->argv[2],expire);
+    // 删除oldKey 具体的删除逻辑和lazyfree_lazy_server_del 参数息息相关
     dbDelete(c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[2]);
@@ -1157,6 +1166,7 @@ void renameGenericCommand(client *c, int nx) {
     addReply(c,nx ? shared.cone : shared.ok);
 }
 
+// 重命名redis key 的命令
 void renameCommand(client *c) {
     renameGenericCommand(c,0);
 }
